@@ -1,3 +1,6 @@
+import json
+from dicttoxml import dicttoxml
+from fpdf import FPDF
 import os
 from datetime import datetime
 import random
@@ -100,22 +103,24 @@ def escolher_opcao_listagem():
 
 def listar_produtos_ativos():
     limpar_tela()
-    if produtos == True:
+    ativos = [p for p in produtos if p['ativo']]
+    if ativos:
         print("Produtos ativos:\n")
-        for i, produto in enumerate(produtos, start = 1):
-            if produto['ativo']:
-                print(f'{i}. {produto["nome"]}\n')
+        for i, produto in enumerate(ativos, start = 1):
+            print(f'{i}. {produto["nome"]}')
+        voltar_ao_menu_principal()
     else:
-        print('Nehum produto ativado.')
-    voltar_ao_menu_principal()
+        print('Nenhum produto ativado.')
+        voltar_ao_menu_principal()
 
 def listar_produtos_desativados():
     limpar_tela()
-    if produtos == False:
+    inativos = [p for p in produtos if not p['ativo']]
+    if inativos:
         print("Produtos desativados:\n")
-        for i, produto in enumerate(produtos, start = 1):
-            if not produto['ativo']:
-                print(f'{i}. {produto["nome"]}')
+        for i, produto in enumerate(inativos, start = 1):
+            print(f'{i}. {produto["nome"]}')
+        voltar_ao_menu_principal()
     else:
         print('Nenhum produto desativado.')
         voltar_ao_menu_principal()
@@ -202,6 +207,29 @@ def remover_produto():
         print('Nenhum produto cadastrado.')
     voltar_ao_menu_principal()
 
+def salvar_nota_em_arquivos(dados_nota):
+    numero = dados_nota["numero"]
+    nome_base = f"nota_fiscal_{numero}"
+
+    with open(f"{nome_base}.json", "w", encoding="utf-8") as f_json:
+        json.dump(dados_nota, f_json, ensure_ascii=False, indent=4)
+
+    xml_data = dicttoxml(dados_nota, custom_root="NotaFiscal", attr_type=False)
+    with open(f"{nome_base}.xml", "wb") as f_xml:
+        f_xml.write(xml_data)
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    pdf.cell(200, 10, txt="Nota Fiscal - Café Express", ln=True, align="C")
+    pdf.cell(200, 10, txt=f"Número: {numero}", ln=True)
+    pdf.cell(200, 10, txt=f"Data: {dados_nota['data']}", ln=True)
+    pdf.cell(200, 10, txt=f"Cliente: {dados_nota['cliente']}", ln=True)
+    pdf.cell(200, 10, txt=f"Produto: {dados_nota['produto']}", ln=True)
+    pdf.cell(200, 10, txt=f"Valor: R$ {dados_nota['valor']:.2f}", ln=True)
+    pdf.output(f"{nome_base}.pdf")
+
 def emitir_nota_fiscal():
     global numero_nota
     limpar_tela()
@@ -238,7 +266,18 @@ def emitir_nota_fiscal():
                 print(f"Produto: {p['nome']}")
                 print(f"Valor: R$ {valor:.2f}")
                 print("═"*26)
-                numero_nota = random.randint(1, 9999)
+
+                dados_nota = {
+                    "numero": numero_nota,
+                    "data": data,
+                    "cliente": cliente if cliente else "Não informado",
+                    "produto": p['nome'],
+                    "valor": valor
+                }
+
+                salvar_nota_em_arquivos(dados_nota)
+
+                numero_nota = random.randint(1, 9999    )
                 voltar_ao_menu_principal()
 
         print(f"\nProduto '{nome}' não está disponível ou não está ativo.")
