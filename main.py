@@ -4,9 +4,13 @@ from fpdf import FPDF
 import os
 from datetime import datetime
 import random
+import re
+import smtplib
 
 produtos = []
 numero_nota = random.randint(1, 9999)
+servidor_email = smtplib.SMTP('smtp.gmail.com', 587)
+servidor_email.starttls()
 
 def limpar_tela():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -230,6 +234,27 @@ def salvar_nota_em_arquivos(dados_nota):
     pdf.cell(200, 10, txt=f"Valor: R$ {dados_nota['valor']:.2f}", ln=True)
     pdf.output(f"{nome_base}.pdf")
 
+def enviar_email(dados_nota):
+    while True:
+        print("Envio de e-mail\n")
+        remetente = "adammasulli@gmail.com"
+        email = input("Digite o email: ").strip()
+        conteudo = salvar_nota_em_arquivos(dados_nota)
+        if validar_email(email):
+            servidor_email.sendmail(remetente, email, conteudo)
+            print(f"\nNota fiscal enviada para o email '{email}' com sucesso!")
+            servidor_email.quit()
+            break
+        else:
+            limpar_tela()
+            input("Email inválido. Aperte enter para tentar novamente. ")
+        limpar_tela()
+        enviar_email(dados_nota)
+
+def validar_email(email):
+    padrao_email = r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$'
+    return re.fullmatch (padrao_email, email)
+
 def emitir_nota_fiscal():
     global numero_nota
     limpar_tela()
@@ -250,6 +275,7 @@ def emitir_nota_fiscal():
             limpar_tela()
             print(f"Produto '{nome}' não encontrado na lista de produtos ativos.")
             voltar_ao_menu_principal()
+            return
             
         cliente = input("Cliente (opcional): ").strip()
 
@@ -277,10 +303,18 @@ def emitir_nota_fiscal():
 
                 salvar_nota_em_arquivos(dados_nota)
 
-                numero_nota = random.randint(1, 9999    )
-                voltar_ao_menu_principal()
+                numero_nota = random.randint(1, 9999)
 
-        print(f"\nProduto '{nome}' não está disponível ou não está ativo.")
+                resposta = input("deseja enviar essa nota para um email? (s/n): ")
+                if resposta.lower() == "s":
+                    limpar_tela()
+                    enviar_email(dados_nota)
+                elif resposta.lower() == "n":
+                    main()
+                else:
+                    opcao_invalida()
+                    voltar_ao_menu_principal()
+                break
 
     voltar_ao_menu_principal()
 
