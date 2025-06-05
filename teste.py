@@ -1,9 +1,16 @@
+import json
+from dicttoxml import dicttoxml
+from fpdf import FPDF
 import os
 from datetime import datetime
 import random
+import re
+import smtplib
 
 produtos = []
 numero_nota = random.randint(1, 9999)
+servidor_email = smtplib.SMTP('smtp.gmail.com', 587)
+servidor_email.starttls()
 
 def limpar_tela():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -29,7 +36,7 @@ def finalizar_app():
         limpar_tela()
         print('Finalizando o app...')
     elif resposta.lower() == 'n':
-        voltar_ao_menu_principal()
+        main()
     else:
         finalizar_app()
 
@@ -48,7 +55,7 @@ def cadastrar_novo_produto():
     nome_do_produto = input('Digite o nome do produto que deseja cadastrar: ')
     if nome_do_produto in [p['nome'] for p in produtos]:
         limpar_tela()
-        print(f'Produto {nome_do_produto} ja está cadastrado, tente outro produto.')
+        print(f"Produto '{nome_do_produto}' já está cadastrado, tente outro produto.")
         voltar_ao_menu_principal()
 
     elif nome_do_produto == '':
@@ -58,7 +65,7 @@ def cadastrar_novo_produto():
         produto = {'nome': nome_do_produto, 'ativo': False}
         produtos.append(produto)
         limpar_tela()
-        print(f'O Produto {nome_do_produto} foi cadastrado com sucesso!')
+        print(f"O Produto '{nome_do_produto}' foi cadastrado com sucesso!")
         voltar_ao_menu_principal()
 
 def listar_produtos():
@@ -70,17 +77,6 @@ def listar_produtos():
             print(f'{i}. {produto["nome"]} - {status}')
     else:
         print('Nenhum produto cadastrado.')
-    voltar_ao_menu_principal()
-
-def listar_produtos_ativos():
-    limpar_tela()
-    if produtos:
-        for i, produto in enumerate(produtos, start = 1):
-            if produto['ativo']:
-                print("Produtos ativos:\n")
-                print(f'{i}. {produto["nome"]}')
-    else:
-        print('Nehum produto ativado.')
     voltar_ao_menu_principal()
 
 def opcao_listagem():
@@ -96,17 +92,6 @@ def error_listagem():
     opcao_listagem()
     escolher_opcao_listagem()
 
-def listar_produtos_desativados():
-    limpar_tela()
-    if produtos:
-        for i, produto in enumerate(produtos, start = 1):
-            if not produto['ativo']:
-                print("Produtos inativos:\n")
-                print(f'{i}. {produto["nome"]}')
-    else:
-        print('Nenhum produto desativado.')
-    voltar_ao_menu_principal()
-
 def escolher_opcao_listagem():
     opcao = input('\nEscolha a forma de listagem: ')
     if opcao == '1':
@@ -120,6 +105,30 @@ def escolher_opcao_listagem():
     else:
         error_listagem()
 
+def listar_produtos_ativos():
+    limpar_tela()
+    ativos = [p for p in produtos if p['ativo']]
+    if ativos:
+        print("Produtos ativos:\n")
+        for i, produto in enumerate(ativos, start = 1):
+            print(f'{i}. {produto["nome"]}')
+        voltar_ao_menu_principal()
+    else:
+        print('Nenhum produto ativado.')
+        voltar_ao_menu_principal()
+
+def listar_produtos_desativados():
+    limpar_tela()
+    inativos = [p for p in produtos if not p['ativo']]
+    if inativos:
+        print("Produtos desativados:\n")
+        for i, produto in enumerate(inativos, start = 1):
+            print(f'{i}. {produto["nome"]}')
+        voltar_ao_menu_principal()
+    else:
+        print('Nenhum produto desativado.')
+        voltar_ao_menu_principal()
+
 def ativar_produtos():
     limpar_tela()
     if produtos:
@@ -127,10 +136,10 @@ def ativar_produtos():
         for i, produto in enumerate(produtos, start = 1):
             print(f"{i}. {produto['nome']}")
 
-        nomeDoProduto = input("\nDigite o nome do produto que deseja ativar: ")
+        nome_do_produto = input("\nDigite o nome do produto que deseja ativar: ")
 
         for produto in produtos:
-            if produto['nome'].lower() == nomeDoProduto.lower():
+            if produto['nome'].lower() == nome_do_produto.lower():
                 if produto['ativo']:
                     limpar_tela()
                     print(f"\nO produto '{produto['nome']}' já está ativado.")
@@ -140,10 +149,12 @@ def ativar_produtos():
                     produto['ativo'] = True
                     print(f"\nProduto '{produto['nome']}' ativado com sucesso!")
                 voltar_ao_menu_principal()
-                return
-
+            
+        if nome_do_produto == '':
+            opcao_invalida()
+        
         limpar_tela()
-        print(f"Produto {nomeDoProduto} não encontrado na lista.")
+        print(f"Produto '{nome_do_produto}' não encontrado na lista.")
     else:
         print('Nenhum produto cadastrado.')
     voltar_ao_menu_principal()
@@ -155,10 +166,10 @@ def desativar_produtos():
         for i, produto in enumerate(produtos, start = 1):
             print(f"{i}. {produto['nome']}")
 
-        nomeDoProduto = input("\nDigite o nome do produto que deseja desativar: ")
+        nome_do_produto = input("\nDigite o nome do produto que deseja desativar: ")
 
         for produto in produtos:
-            if produto['nome'].lower() == nomeDoProduto.lower():
+            if produto['nome'].lower() == nome_do_produto.lower():
                 if not produto['ativo']:
                     limpar_tela()
                     print(f"\nO produto '{produto['nome']}' já está desativado.")
@@ -167,10 +178,12 @@ def desativar_produtos():
                     produto['ativo'] = False
                     print(f"\nProduto '{produto['nome']}' desativado com sucesso!")
                 voltar_ao_menu_principal()
-                return
+            
+        if nome_do_produto == '':
+            opcao_invalida()
 
         limpar_tela()
-        print(f"Produto {nomeDoProduto} não encontrado na lista.")
+        print(f"Produto '{nome_do_produto}' não encontrado na lista.")
     else:
         print('Nenhum produto cadastrado.')
     voltar_ao_menu_principal()
@@ -182,10 +195,10 @@ def remover_produto():
         for i, produto in enumerate(produtos, start = 1):
             print(f"{i}. {produto['nome']}")
 
-        nomeDoProduto = input("\nDigite o nome do produto que deseja remover: ")
+        nome_do_produto = input("\nDigite o nome do produto que deseja remover: ")
 
         for produto in produtos:
-            if produto['nome'].lower() == nomeDoProduto.lower():
+            if produto['nome'].lower() == nome_do_produto.lower():
                 produtos.remove(produto)
                 limpar_tela()
                 print(f"Produto '{produto['nome']}' removido com sucesso!")
@@ -193,10 +206,54 @@ def remover_produto():
                 return
 
         limpar_tela()
-        print(f"Produto {nomeDoProduto} não encontrado na lista.")
+        print(f"Produto {nome_do_produto} não encontrado na lista.")
     else:
         print('Nenhum produto cadastrado.')
     voltar_ao_menu_principal()
+
+def salvar_nota_em_arquivos(dados_nota):
+    numero = dados_nota["numero"]
+    nome_base = f"nota_fiscal_{numero}"
+
+    with open(f"{nome_base}.json", "w", encoding="utf-8") as f_json:
+        json.dump(dados_nota, f_json, ensure_ascii=False, indent=4)
+
+    xml_data = dicttoxml(dados_nota, custom_root="NotaFiscal", attr_type=False)
+    with open(f"{nome_base}.xml", "wb") as f_xml:
+        f_xml.write(xml_data)
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    pdf.cell(200, 10, txt="Nota Fiscal - Café Express", ln=True, align="C")
+    pdf.cell(200, 10, txt=f"Número: {numero}", ln=True)
+    pdf.cell(200, 10, txt=f"Data: {dados_nota['data']}", ln=True)
+    pdf.cell(200, 10, txt=f"Cliente: {dados_nota['cliente']}", ln=True)
+    pdf.cell(200, 10, txt=f"Produto: {dados_nota['produto']}", ln=True)
+    pdf.cell(200, 10, txt=f"Valor: R$ {dados_nota['valor']:.2f}", ln=True)
+    pdf.output(f"{nome_base}.pdf")
+
+def enviar_email(dados_nota):
+    while True:
+        print("Envio de e-mail\n")
+        remetente = "adammasulli@gmail.com"
+        email = input("Digite o email: ").strip()
+        conteudo = salvar_nota_em_arquivos(dados_nota)
+        if validar_email(email):
+            servidor_email.sendmail(remetente, email, conteudo)
+            print(f"\nNota fiscal enviada para o email '{email}' com sucesso!")
+            servidor_email.quit()
+            break
+        else:
+            limpar_tela()
+            input("Email inválido. Aperte enter para tentar novamente. ")
+        limpar_tela()
+        enviar_email(dados_nota)
+
+def validar_email(email):
+    padrao_email = r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$'
+    return re.fullmatch (padrao_email, email)
 
 def emitir_nota_fiscal():
     global numero_nota
@@ -218,6 +275,7 @@ def emitir_nota_fiscal():
             limpar_tela()
             print(f"Produto '{nome}' não encontrado na lista de produtos ativos.")
             voltar_ao_menu_principal()
+            return
             
         cliente = input("Cliente (opcional): ").strip()
 
@@ -234,10 +292,29 @@ def emitir_nota_fiscal():
                 print(f"Produto: {p['nome']}")
                 print(f"Valor: R$ {valor:.2f}")
                 print("═"*26)
-                numero_nota = random.randint(1, 9999)
-                return voltar_ao_menu_principal()
 
-        print(f"\nProduto '{nome}' não está disponível ou não está ativo.")
+                dados_nota = {
+                    "numero": numero_nota,
+                    "data": data,
+                    "cliente": cliente if cliente else "Não informado",
+                    "produto": p['nome'],
+                    "valor": valor
+                }
+
+                salvar_nota_em_arquivos(dados_nota)
+
+                numero_nota = random.randint(1, 9999)
+
+                resposta = input("deseja enviar essa nota para um email? (s/n): ")
+                if resposta.lower() == "s":
+                    limpar_tela()
+                    enviar_email(dados_nota)
+                elif resposta.lower() == "n":
+                    main()
+                else:
+                    opcao_invalida()
+                    voltar_ao_menu_principal()
+                break
 
     voltar_ao_menu_principal()
 
@@ -249,7 +326,6 @@ def escolher_opcao():
         elif opcao_escolhida == 2:
             opcao_listagem()
             escolher_opcao_listagem()
-            listar_produtos()
         elif opcao_escolhida == 3:
             ativar_produtos()
         elif opcao_escolhida == 4:
@@ -262,7 +338,7 @@ def escolher_opcao():
             finalizar_app()
         else:
             opcao_invalida()
-    except:
+    except ValueError:
         opcao_invalida()
 
 def main():

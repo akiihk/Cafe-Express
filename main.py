@@ -6,6 +6,9 @@ from datetime import datetime
 import random
 import re
 import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
 produtos = []
 numero_nota = random.randint(1, 9999)
@@ -235,21 +238,33 @@ def salvar_nota_em_arquivos(dados_nota):
     pdf.output(f"{nome_base}.pdf")
 
 def enviar_email(dados_nota):
-    while True:
-        print("Envio de e-mail\n")
-        remetente = "adammasulli@gmail.com"
-        email = input("Digite o email: ").strip()
-        conteudo = salvar_nota_em_arquivos(dados_nota)
-        if validar_email(email):
-            servidor_email.sendmail(remetente, email, conteudo)
-            print(f"\nNota fiscal enviada para o email '{email}' com sucesso!")
-            servidor_email.quit()
-            break
-        else:
-            limpar_tela()
-            input("Email inválido. Aperte enter para tentar novamente. ")
-        limpar_tela()
-        enviar_email(dados_nota)
+    numero = dados_nota["numero"]
+    nome_base = f"nota_fiscal_{numero}"
+
+    remetente = "adammasulli@gmail.com"
+    senha = "ywhhpgvssbnsewgu"
+
+    msg = MIMEMultipart()
+    print ("Envio de e-mail\n")
+    msg["From"] = remetente
+    msg["To"] = input("Digite o e-mail de destino: ").strip()
+    msg["Subject"] = f"Nota Fiscal {numero}"
+
+    for ext in [".pdf", ".json", ".xml"]:
+        caminho = f"{nome_base}{ext}"
+        with open(caminho, "rb") as f:
+            parte = MIMEBase("application", "octet-stream")
+            parte.set_payload(f.read())
+            encoders.encode_base64(parte)
+            parte.add_header("Content-Disposition", f"attachment; filename={caminho}")
+            msg.attach(parte)
+
+    with smtplib.SMTP("smtp.gmail.com", 587) as servidor:
+        servidor.starttls()
+        servidor.login(remetente, senha)
+        servidor.send_message(msg)
+
+    print(f"\nNota enviada com sucesso para {msg['To']}")
 
 def validar_email(email):
     padrao_email = r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$'
