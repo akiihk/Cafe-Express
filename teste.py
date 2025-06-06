@@ -64,8 +64,9 @@ def desativar_produto_api(nome_do_produto):
 
 @app.route('/produtos/<string:nome_do_produto>', methods=['DELETE'])
 def remover_produto_api(nome_do_produto):
-    initial_len = len(produtos)
     global produtos
+
+    initial_len = len(produtos)
     produtos = [p for p in produtos if p['nome'].lower() != nome_do_produto.lower()]
 
     if len(produtos) < initial_len:
@@ -105,8 +106,8 @@ def enviar_email(dados_nota, destino_email):
     numero = dados_nota["numero"]
     nome_base = f"nota_fiscal_{numero}"
     
-    remetente = "seu_email@gmail.com"
-    senha = "sua_senha_aqui"
+    remetente = "adammasulli@gmail.com"
+    senha = "ywhhpgvssbnsewgu"
 
     msg = MIMEMultipart()
     msg["From"] = remetente
@@ -177,11 +178,9 @@ def emitir_nota_fiscal_api():
 
     try:
         salvar_nota_em_arquivos(dados_nota)
-        
-        numero_nota = random.randint(1000, 9999) 
-
+        numero_nota = random.randint(1000, 9999)
         response_message = f"Nota fiscal {dados_nota['numero']} emitida com sucesso e salva em 'notas_fiscais/'."
-        
+
         if email_destino:
             if validar_email(email_destino):
                 if enviar_email(dados_nota, email_destino):
@@ -191,10 +190,12 @@ def emitir_nota_fiscal_api():
             else:
                 response_message += f" O e-mail '{email_destino}' fornecido é inválido. E-mail não enviado."
 
-        return jsonify({"message": response_message, "nota_fiscal": dados_nota}), 200
+        return jsonify({"message": response_message}), 200
 
     except Exception as e:
-        return jsonify({"error": f"Erro ao emitir nota fiscal: {str(e)}"}), 500
+        print("Erro ao emitir nota fiscal:", e)
+        return jsonify({"error": f"Erro interno ao emitir nota fiscal: {str(e)}"}), 500
+
 
 from flask_cors import CORS
 CORS(app)
