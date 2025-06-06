@@ -1,225 +1,91 @@
-import json
+import os
+from flask import Flask, request, jsonify
 from dicttoxml import dicttoxml
 from fpdf import FPDF
-import os
+import json
 from datetime import datetime
 import random
 import re
 import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+
+app = Flask(__name__)
 
 produtos = []
-numero_nota = random.randint(1, 9999)
-servidor_email = smtplib.SMTP('smtp.gmail.com', 587)
-servidor_email.starttls()
+numero_nota = random.randint(1000, 9999)
 
-def limpar_tela():
-    os.system('cls' if os.name == 'nt' else 'clear')
+def get_produtos_info():
+    return [{"nome": p["nome"], "ativo": p["ativo"]} for p in produtos]
 
-def exibir_nome_do_programa():
-    print('╔══════════════════════════╗')
-    print('║  ☕  Café Express ☕     ║')  
-    print('╚══════════════════════════╝\n')
+@app.route('/produtos', methods=['GET'])
+def listar_produtos_api():
+    if not produtos:
+        return jsonify({"message": "Nenhum produto cadastrado."}), 200
+    return jsonify(get_produtos_info()), 200
 
-def exibir_opcoes():
-    print('1. Cadastrar produtos')
-    print('2. Listar produtos')
-    print('3. Ativar produtos')
-    print('4. Desativar produtos')  
-    print('5. Remover produtos')
-    print('6. Emitir nota fiscal (teste)')
-    print('7. Sair\n')
+@app.route('/produtos', methods=['POST'])
+def cadastrar_produto_api():
+    data = request.get_json()
+    nome_do_produto = data.get('nome')
 
-def finalizar_app():
-    limpar_tela()
-    resposta =input('Tem certeza que deseja finalizar o app? (S/N) ') 
-    if resposta.lower() == 's':
-        limpar_tela()
-        print('Finalizando o app...')
-    elif resposta.lower() == 'n':
-        main()
-    else:
-        finalizar_app()
+    if not nome_do_produto:
+        return jsonify({"error": "Nome do produto é obrigatório."}), 400
 
-def voltar_ao_menu_principal():
-    input('\nAperte enter para voltar ao menu principal')
-    main()
+    if any(p['nome'].lower() == nome_do_produto.lower() for p in produtos):
+        return jsonify({"error": f"Produto '{nome_do_produto}' já está cadastrado."}), 409
 
-def opcao_invalida():
-    limpar_tela()
-    print('Opção Inválida!\n')
-    voltar_ao_menu_principal()
+    produto = {'nome': nome_do_produto, 'ativo': False}
+    produtos.append(produto)
+    return jsonify({"message": f"O produto '{nome_do_produto}' foi cadastrado com sucesso!", "produto": produto}), 201
 
-def cadastrar_novo_produto():
-    limpar_tela()
-    print('Cadastro de novos produtos\n')
-    nome_do_produto = input('Digite o nome do produto que deseja cadastrar: ')
-    if nome_do_produto in [p['nome'] for p in produtos]:
-        limpar_tela()
-        print(f"Produto '{nome_do_produto}' já está cadastrado, tente outro produto.")
-        voltar_ao_menu_principal()
+@app.route('/produtos/<string:nome_do_produto>/ativar', methods=['PUT'])
+def ativar_produto_api(nome_do_produto):
+    for produto in produtos:
+        if produto['nome'].lower() == nome_do_produto.lower():
+            if produto['ativo']:
+                return jsonify({"message": f"O produto '{produto['nome']}' já está ativado."}), 200
+            else:
+                produto['ativo'] = True
+                return jsonify({"message": f"Produto '{produto['nome']}' ativado com sucesso!", "produto": produto}), 200
+    return jsonify({"error": f"Produto '{nome_do_produto}' não encontrado."}), 404
 
-    elif nome_do_produto == '':
-        opcao_invalida()
-        
-    else:
-        produto = {'nome': nome_do_produto, 'ativo': False}
-        produtos.append(produto)
-        limpar_tela()
-        print(f"O Produto '{nome_do_produto}' foi cadastrado com sucesso!")
-        voltar_ao_menu_principal()
+@app.route('/produtos/<string:nome_do_produto>/desativar', methods=['PUT'])
+def desativar_produto_api(nome_do_produto):
+    for produto in produtos:
+        if produto['nome'].lower() == nome_do_produto.lower():
+            if not produto['ativo']:
+                return jsonify({"message": f"O produto '{produto['nome']}' já está desativado."}), 200
+            else:
+                produto['ativo'] = False
+                return jsonify({"message": f"Produto '{produto['nome']}' desativado com sucesso!", "produto": produto}), 200
+    return jsonify({"error": f"Produto '{nome_do_produto}' não encontrado."}), 404
 
-def listar_produtos():
-    limpar_tela()
-    if produtos:
-        print("Produtos cadastrados:\n")
-        for i, produto in enumerate(produtos, start = 1):
-            status = '✅ Ativo' if produto['ativo'] else '❌ Inativo'
-            print(f'{i}. {produto["nome"]} - {status}')
-    else:
-        print('Nenhum produto cadastrado.')
-    voltar_ao_menu_principal()
+@app.route('/produtos/<string:nome_do_produto>', methods=['DELETE'])
+def remover_produto_api(nome_do_produto):
+    initial_len = len(produtos)
+    global produtos
+    produtos = [p for p in produtos if p['nome'].lower() != nome_do_produto.lower()]
 
-def opcao_listagem():
-    limpar_tela()
-    print('1. Listar todos os produtos')
-    print('2. Listar produtos ativos')
-    print('3. Listar produtos desativados')
-    print('4. Voltar ao menu principal')
-
-def error_listagem():
-    limpar_tela()
-    input('Opção inválida, aperte enter para tentar novamente.')
-    opcao_listagem()
-    escolher_opcao_listagem()
-
-def escolher_opcao_listagem():
-    opcao = input('\nEscolha a forma de listagem: ')
-    if opcao == '1':
-        listar_produtos()
-    elif opcao == '2':
-        listar_produtos_ativos()
-    elif opcao == '3':
-        listar_produtos_desativados()
-    elif opcao == '4':
-        main()
-    else:
-        error_listagem()
-
-def listar_produtos_ativos():
-    limpar_tela()
-    ativos = [p for p in produtos if p['ativo']]
-    if ativos:
-        print("Produtos ativos:\n")
-        for i, produto in enumerate(ativos, start = 1):
-            print(f'{i}. {produto["nome"]}')
-        voltar_ao_menu_principal()
-    else:
-        print('Nenhum produto ativado.')
-        voltar_ao_menu_principal()
-
-def listar_produtos_desativados():
-    limpar_tela()
-    inativos = [p for p in produtos if not p['ativo']]
-    if inativos:
-        print("Produtos desativados:\n")
-        for i, produto in enumerate(inativos, start = 1):
-            print(f'{i}. {produto["nome"]}')
-        voltar_ao_menu_principal()
-    else:
-        print('Nenhum produto desativado.')
-        voltar_ao_menu_principal()
-
-def ativar_produtos():
-    limpar_tela()
-    if produtos:
-        print("Produtos cadastrados:\n")
-        for i, produto in enumerate(produtos, start = 1):
-            print(f"{i}. {produto['nome']}")
-
-        nome_do_produto = input("\nDigite o nome do produto que deseja ativar: ")
-
-        for produto in produtos:
-            if produto['nome'].lower() == nome_do_produto.lower():
-                if produto['ativo']:
-                    limpar_tela()
-                    print(f"\nO produto '{produto['nome']}' já está ativado.")
-
-                else:
-                    limpar_tela()
-                    produto['ativo'] = True
-                    print(f"\nProduto '{produto['nome']}' ativado com sucesso!")
-                voltar_ao_menu_principal()
-            
-        if nome_do_produto == '':
-            opcao_invalida()
-        
-        limpar_tela()
-        print(f"Produto '{nome_do_produto}' não encontrado na lista.")
-    else:
-        print('Nenhum produto cadastrado.')
-    voltar_ao_menu_principal()
-
-def desativar_produtos():
-    limpar_tela()
-    if produtos:
-        print("Produtos cadastrados:\n")
-        for i, produto in enumerate(produtos, start = 1):
-            print(f"{i}. {produto['nome']}")
-
-        nome_do_produto = input("\nDigite o nome do produto que deseja desativar: ")
-
-        for produto in produtos:
-            if produto['nome'].lower() == nome_do_produto.lower():
-                if not produto['ativo']:
-                    limpar_tela()
-                    print(f"\nO produto '{produto['nome']}' já está desativado.")
-                else:
-                    limpar_tela()
-                    produto['ativo'] = False
-                    print(f"\nProduto '{produto['nome']}' desativado com sucesso!")
-                voltar_ao_menu_principal()
-            
-        if nome_do_produto == '':
-            opcao_invalida()
-
-        limpar_tela()
-        print(f"Produto '{nome_do_produto}' não encontrado na lista.")
-    else:
-        print('Nenhum produto cadastrado.')
-    voltar_ao_menu_principal()
-
-def remover_produto():
-    limpar_tela()
-    if produtos:
-        print("Produtos cadastrados:\n")
-        for i, produto in enumerate(produtos, start = 1):
-            print(f"{i}. {produto['nome']}")
-
-        nome_do_produto = input("\nDigite o nome do produto que deseja remover: ")
-
-        for produto in produtos:
-            if produto['nome'].lower() == nome_do_produto.lower():
-                produtos.remove(produto)
-                limpar_tela()
-                print(f"Produto '{produto['nome']}' removido com sucesso!")
-                voltar_ao_menu_principal()
-                return
-
-        limpar_tela()
-        print(f"Produto {nome_do_produto} não encontrado na lista.")
-    else:
-        print('Nenhum produto cadastrado.')
-    voltar_ao_menu_principal()
+    if len(produtos) < initial_len:
+        return jsonify({"message": f"Produto '{nome_do_produto}' removido com sucesso!"}), 200
+    return jsonify({"error": f"Produto '{nome_do_produto}' não encontrado."}), 404
 
 def salvar_nota_em_arquivos(dados_nota):
     numero = dados_nota["numero"]
     nome_base = f"nota_fiscal_{numero}"
 
-    with open(f"{nome_base}.json", "w", encoding="utf-8") as f_json:
+    if not os.path.exists('notas_fiscais'):
+        os.makedirs('notas_fiscais')
+
+    json_path = os.path.join('notas_fiscais', f"{nome_base}.json")
+    with open(json_path, "w", encoding="utf-8") as f_json:
         json.dump(dados_nota, f_json, ensure_ascii=False, indent=4)
 
     xml_data = dicttoxml(dados_nota, custom_root="NotaFiscal", attr_type=False)
-    with open(f"{nome_base}.xml", "wb") as f_xml:
+    xml_path = os.path.join('notas_fiscais', f"{nome_base}.xml")
+    with open(xml_path, "wb") as f_xml:
         f_xml.write(xml_data)
 
     pdf = FPDF()
@@ -232,120 +98,106 @@ def salvar_nota_em_arquivos(dados_nota):
     pdf.cell(200, 10, txt=f"Cliente: {dados_nota['cliente']}", ln=True)
     pdf.cell(200, 10, txt=f"Produto: {dados_nota['produto']}", ln=True)
     pdf.cell(200, 10, txt=f"Valor: R$ {dados_nota['valor']:.2f}", ln=True)
-    pdf.output(f"{nome_base}.pdf")
+    pdf_path = os.path.join('notas_fiscais', f"{nome_base}.pdf")
+    pdf.output(pdf_path)
 
-def enviar_email(dados_nota):
-    while True:
-        print("Envio de e-mail\n")
-        remetente = "adammasulli@gmail.com"
-        email = input("Digite o email: ").strip()
-        conteudo = salvar_nota_em_arquivos(dados_nota)
-        if validar_email(email):
-            servidor_email.sendmail(remetente, email, conteudo)
-            print(f"\nNota fiscal enviada para o email '{email}' com sucesso!")
-            servidor_email.quit()
-            break
-        else:
-            limpar_tela()
-            input("Email inválido. Aperte enter para tentar novamente. ")
-        limpar_tela()
-        enviar_email(dados_nota)
+def enviar_email(dados_nota, destino_email):
+    numero = dados_nota["numero"]
+    nome_base = f"nota_fiscal_{numero}"
+    
+    remetente = "seu_email@gmail.com"
+    senha = "sua_senha_aqui"
+
+    msg = MIMEMultipart()
+    msg["From"] = remetente
+    msg["To"] = destino_email
+    msg["Subject"] = f"Nota Fiscal {numero}"
+
+    for ext in [".pdf", ".json", ".xml"]:
+        caminho = os.path.join('notas_fiscais', f"{nome_base}{ext}")
+        try:
+            with open(caminho, "rb") as f:
+                parte = MIMEBase("application", "octet-stream")
+                parte.set_payload(f.read())
+                encoders.encode_base64(parte)
+                parte.add_header("Content-Disposition", f"attachment; filename={os.path.basename(caminho)}")
+                msg.attach(parte)
+        except FileNotFoundError:
+            print(f"Arquivo de anexo não encontrado: {caminho}")
+            continue
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as servidor:
+            servidor.starttls()
+            servidor.login(remetente, senha)
+            servidor.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"Erro ao enviar e-mail: {e}")
+        return False
 
 def validar_email(email):
     padrao_email = r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$'
-    return re.fullmatch (padrao_email, email)
+    return re.fullmatch(padrao_email, email)
 
-def emitir_nota_fiscal():
+@app.route('/nota_fiscal', methods=['POST'])
+def emitir_nota_fiscal_api():
     global numero_nota
-    limpar_tela()
+    data = request.get_json()
+    nome_produto_vendido = data.get('produto')
+    cliente = data.get('cliente', 'Não informado')
+    email_destino = data.get('email_destino')
 
-    ativos = [p for p in produtos if isinstance(p, dict) and p.get('ativo')]
+    if not nome_produto_vendido:
+        return jsonify({"error": "Nome do produto é obrigatório para emitir a nota."}), 400
 
-    if not produtos:
-        print("Nenhum produto cadastrado.")
-    elif not ativos:
-        print("Nenhum produto ativado. Ative um produto antes de emitir uma nota.")
-    else:
-        print("Produtos ativos disponíveis para venda:\n")
-        for i, p in enumerate(ativos, 1):
-            print(f"{i}. {p['nome']}")
-        
-        nome = input("\nProduto vendido: ").strip().lower()
-        if not any(p['nome'].lower() == nome for p in ativos):
-            limpar_tela()
-            print(f"Produto '{nome}' não encontrado na lista de produtos ativos.")
-            voltar_ao_menu_principal()
-            return
-            
-        cliente = input("Cliente (opcional): ").strip()
+    ativos = [p for p in produtos if p.get('ativo')]
 
+    produto_encontrado = None
+    for p in ativos:
+        if p['nome'].lower() == nome_produto_vendido.lower():
+            produto_encontrado = p
+            break
 
-        for p in ativos:
-            if p['nome'].lower() == nome:
-                valor = round(random.uniform(3.5, 20.0), 2)
-                data = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-                limpar_tela()
-                print("🧾 Nota Fiscal (Teste)\n" + "═"*26)
-                print(f"Nota nº: {numero_nota}")
-                print(f"Data: {data}")
-                print(f"Cliente: {cliente or 'Não informado'}")
-                print(f"Produto: {p['nome']}")
-                print(f"Valor: R$ {valor:.2f}")
-                print("═"*26)
+    if not produto_encontrado:
+        if not ativos:
+            return jsonify({"error": "Nenhum produto ativado. Ative um produto antes de emitir uma nota."}), 400
+        return jsonify({"error": f"Produto '{nome_produto_vendido}' não encontrado na lista de produtos ativos."}), 404
 
-                dados_nota = {
-                    "numero": numero_nota,
-                    "data": data,
-                    "cliente": cliente if cliente else "Não informado",
-                    "produto": p['nome'],
-                    "valor": valor
-                }
+    valor = round(random.uniform(3.5, 20.0), 2)
+    data_hora = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
 
-                salvar_nota_em_arquivos(dados_nota)
+    dados_nota = {
+        "numero": numero_nota,
+        "data": data_hora,
+        "cliente": cliente,
+        "produto": produto_encontrado['nome'],
+        "valor": valor
+    }
 
-                numero_nota = random.randint(1, 9999)
-
-                resposta = input("deseja enviar essa nota para um email? (s/n): ")
-                if resposta.lower() == "s":
-                    limpar_tela()
-                    enviar_email(dados_nota)
-                elif resposta.lower() == "n":
-                    main()
-                else:
-                    opcao_invalida()
-                    voltar_ao_menu_principal()
-                break
-
-    voltar_ao_menu_principal()
-
-def escolher_opcao():
     try:
-        opcao_escolhida = int(input('Escolha uma opção: '))
-        if opcao_escolhida == 1:
-            cadastrar_novo_produto()
-        elif opcao_escolhida == 2:
-            opcao_listagem()
-            escolher_opcao_listagem()
-        elif opcao_escolhida == 3:
-            ativar_produtos()
-        elif opcao_escolhida == 4:
-            desativar_produtos()
-        elif opcao_escolhida == 5:
-            remover_produto()
-        elif opcao_escolhida == 6:
-            emitir_nota_fiscal()
-        elif opcao_escolhida == 7:
-            finalizar_app()
-        else:
-            opcao_invalida()
-    except ValueError:
-        opcao_invalida()
+        salvar_nota_em_arquivos(dados_nota)
+        
+        numero_nota = random.randint(1000, 9999) 
 
-def main():
-    limpar_tela()
-    exibir_nome_do_programa()
-    exibir_opcoes()
-    escolher_opcao()
+        response_message = f"Nota fiscal {dados_nota['numero']} emitida com sucesso e salva em 'notas_fiscais/'."
+        
+        if email_destino:
+            if validar_email(email_destino):
+                if enviar_email(dados_nota, email_destino):
+                    response_message += f" E-mail enviado com sucesso para {email_destino}."
+                else:
+                    response_message += f" Falha ao enviar e-mail para {email_destino}. Verifique as configurações do servidor e as credenciais."
+            else:
+                response_message += f" O e-mail '{email_destino}' fornecido é inválido. E-mail não enviado."
+
+        return jsonify({"message": response_message, "nota_fiscal": dados_nota}), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Erro ao emitir nota fiscal: {str(e)}"}), 500
+
+from flask_cors import CORS
+CORS(app)
 
 if __name__ == '__main__':
-    main()
+    app.run(debug=True)
